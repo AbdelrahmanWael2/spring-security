@@ -6,8 +6,8 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Data
 @Table(name = "role")
+@Data
 @Getter
 @Setter
 public class Role {

@@ -3,6 +3,9 @@ package com.example.security.Controller;
 import com.example.security.DTO.AuthResponseDTO;
 import com.example.security.DTO.LoginDTO;
 import com.example.security.DTO.RegisterDTO;
+import com.example.security.DTO.otpDTO;
+import com.example.security.OTP.EmailService;
+import com.example.security.OTP.Util;
 import com.example.security.entity.Role;
 import com.example.security.entity.UserEntity;
 import com.example.security.repository.RoleRepository;
@@ -24,17 +27,18 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Collections;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping("/api/public")
 public class AppController {
 
     @Autowired
     public AppController(AuthenticationManager authenticationManager, UserEntityRepository userEntityRepository,
-                         RoleRepository roleRepository, PasswordEncoder passwordEncoder, JWTGenerator jwtGenerator){
+                         RoleRepository roleRepository, PasswordEncoder passwordEncoder, JWTGenerator jwtGenerator, EmailService emailService){
         this.userEntityRepository = userEntityRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.jwtGenerator = jwtGenerator;
+        this.emailService = emailService;
     }
 
     private final UserEntityRepository userEntityRepository;
@@ -47,23 +51,44 @@ public class AppController {
 
     private final JWTGenerator jwtGenerator;
 
+    private final EmailService emailService;
 
     @PostMapping("/register")
-    public ResponseEntity<String> registerUser(@RequestBody RegisterDTO registerDTO){
-        if(userEntityRepository.existsByUsername(registerDTO.getUsername())){
-            return new ResponseEntity<>("Username is already taken !", HttpStatus.BAD_REQUEST);
+    public ResponseEntity<String> registerUser(@RequestBody RegisterDTO registerDTO) {
+        if (userEntityRepository.existsByUsername(registerDTO.getUsername())) {
+            return new ResponseEntity<>("Username is already taken!", HttpStatus.BAD_REQUEST);
         }
 
         UserEntity user = new UserEntity();
         user.setUsername(registerDTO.getUsername());
         user.setPassword(passwordEncoder.encode(registerDTO.getPassword()));
+        user.setEmail(registerDTO.getEmail());
+        user.setOtp(Util.generateOtp());
+        user.setVerified(false);
 
-        Role role = roleRepository.findByName("USER").get();
-        user.setRole(Collections.singletonList(role));
+        Role role = roleRepository.findByName("ROLE_USER").orElseThrow(() -> new RuntimeException("Role not found"));
+        user.setRole(role);
 
         userEntityRepository.save(user);
 
-        return new ResponseEntity<>("Username registration complete", HttpStatus.OK);
+        emailService.sendOtp(user.getEmail(), user.getOtp());
+
+        return new ResponseEntity<>("User registration initiated. Please check your email for OTP.", HttpStatus.OK);
+    }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<String> verifyOtp(@RequestBody otpDTO otpDTO) {
+        UserEntity user = userEntityRepository.findByUsername(otpDTO.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if (user.getOtp().equals(otpDTO.getOtp())) {
+            user.setVerified(true);
+            user.setOtp(null);
+            userEntityRepository.save(user);
+            return new ResponseEntity<>("Email verified successfully", HttpStatus.OK);
+        }
+
+        return new ResponseEntity<>("Invalid OTP", HttpStatus.BAD_REQUEST);
     }
 
     @PostMapping("/login")
