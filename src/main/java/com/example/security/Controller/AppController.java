@@ -1,9 +1,6 @@
 package com.example.security.Controller;
 
-import com.example.security.DTO.AuthResponseDTO;
-import com.example.security.DTO.LoginDTO;
-import com.example.security.DTO.RegisterDTO;
-import com.example.security.DTO.otpDTO;
+import com.example.security.DTO.*;
 import com.example.security.OTP.EmailService;
 import com.example.security.OTP.Util;
 import com.example.security.entity.Role;
@@ -11,6 +8,7 @@ import com.example.security.entity.UserEntity;
 import com.example.security.repository.RoleRepository;
 import com.example.security.repository.UserEntityRepository;
 import com.example.security.security.JWTGenerator;
+import org.apache.catalina.User;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collections;
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/public")
@@ -101,5 +100,30 @@ public class AppController {
         String token = jwtGenerator.generateToken(authentication);
         return new ResponseEntity<>(new AuthResponseDTO(token), HttpStatus.OK);
     }
+
+    @PostMapping("/forget-password")
+    public ResponseEntity<String> forgetPassword(@RequestBody ForgetPasswordDTO forgetPasswordDTO){
+        UserEntity user = userEntityRepository.findByUsername(forgetPasswordDTO.getUsername()).orElseThrow();
+        String verCode = Util.generateOtp();
+        user.setVerCode(verCode);
+        userEntityRepository.save(user);
+        emailService.sendOtp(user.getEmail(), verCode);
+
+        return new ResponseEntity<>("Verification code sent to your email", HttpStatus.OK);
+
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestBody ResetPasswordDTO resetPasswordDTO){
+        UserEntity user = userEntityRepository.findByUsername(resetPasswordDTO.getUsername())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+        System.out.println(user.getVerCode());
+        System.out.println(resetPasswordDTO.getVerCode());
+        if(resetPasswordDTO.getVerCode().equals(user.getVerCode())){
+            user.setPassword(resetPasswordDTO.getNewPassword());
+            return new ResponseEntity<>("New password set", HttpStatus.OK);
+        }else return new ResponseEntity<>("Incorrect otp", HttpStatus.BAD_REQUEST);
+    }
+
 
 }

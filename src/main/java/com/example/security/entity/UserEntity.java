@@ -27,6 +27,7 @@ public class UserEntity {
     private int id;
 
     private String username;
+    private String verCode;
     private String otp;
 
     @Column(name = "is_verified", nullable = false)
